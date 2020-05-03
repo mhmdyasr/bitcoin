@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2018 The Bitcoin Core developers
+# Copyright (c) 2014-2020 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test behavior of headers messages to announce blocks.
@@ -103,7 +103,6 @@ from test_framework.mininode import (
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
-    sync_blocks,
     wait_until,
 )
 
@@ -144,13 +143,6 @@ class BaseNode(P2PInterface):
         getblocks_message = msg_getblocks()
         getblocks_message.locator.vHave = locator
         self.send_message(getblocks_message)
-
-    def wait_for_getdata(self, hash_list, timeout=60):
-        if hash_list == []:
-            return
-
-        test_function = lambda: "getdata" in self.last_message and [x.hash for x in self.last_message["getdata"].inv] == hash_list
-        wait_until(test_function, timeout=timeout, lock=mininode_lock)
 
     def wait_for_block_announcement(self, block_hash, timeout=60):
         test_function = lambda: self.last_blockhash_announced == block_hash
@@ -225,7 +217,7 @@ class SendHeadersTest(BitcoinTestFramework):
 
         # make sure all invalidated blocks are node0's
         self.nodes[0].generatetoaddress(length, self.nodes[0].get_deterministic_priv_key().address)
-        sync_blocks(self.nodes, wait=0.1)
+        self.sync_blocks(self.nodes, wait=0.1)
         for x in self.nodes[0].p2ps:
             x.wait_for_block_announcement(int(self.nodes[0].getbestblockhash(), 16))
             x.clear_block_announcements()
@@ -234,7 +226,7 @@ class SendHeadersTest(BitcoinTestFramework):
         hash_to_invalidate = self.nodes[1].getblockhash(tip_height - (length - 1))
         self.nodes[1].invalidateblock(hash_to_invalidate)
         all_hashes = self.nodes[1].generatetoaddress(length + 1, self.nodes[1].get_deterministic_priv_key().address)  # Must be longer than the orig chain
-        sync_blocks(self.nodes, wait=0.1)
+        self.sync_blocks(self.nodes, wait=0.1)
         return [int(x, 16) for x in all_hashes]
 
     def run_test(self):
@@ -243,10 +235,6 @@ class SendHeadersTest(BitcoinTestFramework):
         # Make sure NODE_NETWORK is not set for test_node, so no block download
         # will occur outside of direct fetching
         test_node = self.nodes[0].add_p2p_connection(BaseNode(), services=NODE_WITNESS)
-
-        # Ensure verack's have been processed by our peer
-        inv_node.sync_with_ping()
-        test_node.sync_with_ping()
 
         self.test_null_locators(test_node, inv_node)
         self.test_nonnull_locators(test_node, inv_node)
@@ -308,8 +296,7 @@ class SendHeadersTest(BitcoinTestFramework):
                 new_block.solve()
                 test_node.send_header_for_blocks([new_block])
                 test_node.wait_for_getdata([new_block.sha256])
-                test_node.send_message(msg_block(new_block))
-                test_node.sync_with_ping()  # make sure this block is processed
+                test_node.send_and_ping(msg_block(new_block))  # make sure this block is processed
                 wait_until(lambda: inv_node.block_announced, timeout=60, lock=mininode_lock)
                 inv_node.clear_block_announcements()
                 test_node.clear_block_announcements()

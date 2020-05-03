@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2018 The Bitcoin Core developers
+// Copyright (c) 2012-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,6 +14,7 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include <algorithm>
 
 #define LN2SQUARED 0.4804530139182014246671025263266649717305529515945455
 #define LN2 0.6931471805599453094172321214581765680755001343602552
@@ -99,19 +100,6 @@ bool CBloomFilter::contains(const uint256& hash) const
 {
     std::vector<unsigned char> data(hash.begin(), hash.end());
     return contains(data);
-}
-
-void CBloomFilter::clear()
-{
-    vData.assign(vData.size(),0);
-    isFull = false;
-    isEmpty = true;
-}
-
-void CBloomFilter::reset(const unsigned int nNewTweak)
-{
-    clear();
-    nTweak = nNewTweak;
 }
 
 bool CBloomFilter::IsWithinSizeConstraints() const
@@ -304,7 +292,5 @@ void CRollingBloomFilter::reset()
     nTweak = GetRand(std::numeric_limits<unsigned int>::max());
     nEntriesThisGeneration = 0;
     nGeneration = 1;
-    for (std::vector<uint64_t>::iterator it = data.begin(); it != data.end(); it++) {
-        *it = 0;
-    }
+    std::fill(data.begin(), data.end(), 0);
 }
