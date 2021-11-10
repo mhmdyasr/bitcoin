@@ -10,6 +10,8 @@
 
 #include <qt/forms/ui_helpmessagedialog.h>
 
+#include <qt/guiutil.h>
+
 #include <clientversion.h>
 #include <init.h>
 #include <util/system.h>
@@ -26,8 +28,8 @@
 #include <QVBoxLayout>
 
 /** "Help message" or "About" dialog box */
-HelpMessageDialog::HelpMessageDialog(interfaces::Node& node, QWidget *parent, bool about) :
-    QDialog(parent),
+HelpMessageDialog::HelpMessageDialog(QWidget *parent, bool about) :
+    QDialog(parent, GUIUtil::dialog_flags),
     ui(new Ui::HelpMessageDialog)
 {
     ui->setupUi(this);
@@ -102,6 +104,8 @@ HelpMessageDialog::HelpMessageDialog(interfaces::Node& node, QWidget *parent, bo
         ui->scrollArea->setVisible(false);
         ui->aboutLogo->setVisible(false);
     }
+
+    GUIUtil::handleCloseWindowShortcut(this);
 }
 
 HelpMessageDialog::~HelpMessageDialog()
@@ -138,9 +142,11 @@ ShutdownWindow::ShutdownWindow(QWidget *parent, Qt::WindowFlags f):
 {
     QVBoxLayout *layout = new QVBoxLayout();
     layout->addWidget(new QLabel(
-        tr("%1 is shutting down...").arg(PACKAGE_NAME) + "<br /><br />" +
+        tr("%1 is shutting down…").arg(PACKAGE_NAME) + "<br /><br />" +
         tr("Do not shut down the computer until this window disappears.")));
     setLayout(layout);
+
+    GUIUtil::handleCloseWindowShortcut(this);
 }
 
 QWidget* ShutdownWindow::showShutdownWindow(QMainWindow* window)
