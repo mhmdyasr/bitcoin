@@ -15,9 +15,10 @@
 
 #include <memory>
 
-std::unique_ptr<CWallet> CreateSyncedWallet(interfaces::Chain& chain, CChain& cchain, const CKey& key)
+namespace wallet {
+std::unique_ptr<CWallet> CreateSyncedWallet(interfaces::Chain& chain, CChain& cchain, ArgsManager& args, const CKey& key)
 {
-    auto wallet = std::make_unique<CWallet>(&chain, "", CreateMockWalletDatabase());
+    auto wallet = std::make_unique<CWallet>(&chain, "", args, CreateMockWalletDatabase());
     {
         LOCK2(wallet->cs_wallet, ::cs_main);
         wallet->SetLastBlockProcessed(cchain.Height(), cchain.Tip()->GetBlockHash());
@@ -44,3 +45,4 @@ std::unique_ptr<CWallet> CreateSyncedWallet(interfaces::Chain& chain, CChain& cc
     BOOST_CHECK(result.last_failed_block.IsNull());
     return wallet;
 }
+} // namespace wallet

@@ -6,6 +6,7 @@
 #define BITCOIN_ADDRMAN_IMPL_H
 
 #include <logging.h>
+#include <logging/timer.h>
 #include <netaddress.h>
 #include <protocol.h>
 #include <serialize.h>
@@ -114,7 +115,7 @@ public:
     bool Add(const std::vector<CAddress>& vAddr, const CNetAddr& source, int64_t nTimePenalty)
         EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
-    void Good(const CService& addr, int64_t nTime)
+    bool Good(const CService& addr, int64_t nTime)
         EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
     void Attempt(const CService& addr, bool fCountFailure, int64_t nTime)
@@ -136,9 +137,11 @@ public:
     void SetServices(const CService& addr, ServiceFlags nServices)
         EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
+    std::optional<AddressPosition> FindAddressEntry(const CAddress& addr)
+        EXCLUSIVE_LOCKS_REQUIRED(!cs);
+
     const std::vector<bool>& GetAsmap() const;
 
-    friend class AddrManTest;
     friend class AddrManDeterministic;
 
 private:
@@ -247,7 +250,7 @@ private:
      *  @see AddrMan::Add() for parameters. */
     bool AddSingle(const CAddress& addr, const CNetAddr& source, int64_t nTimePenalty) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
-    void Good_(const CService& addr, bool test_before_evict, int64_t time) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    bool Good_(const CService& addr, bool test_before_evict, int64_t time) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     bool Add_(const std::vector<CAddress> &vAddr, const CNetAddr& source, int64_t nTimePenalty) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
@@ -265,12 +268,15 @@ private:
 
     std::pair<CAddress, int64_t> SelectTriedCollision_() EXCLUSIVE_LOCKS_REQUIRED(cs);
 
-    //! Consistency check, taking into account m_consistency_check_ratio. Will std::abort if an inconsistency is detected.
+    std::optional<AddressPosition> FindAddressEntry_(const CAddress& addr) EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+    //! Consistency check, taking into account m_consistency_check_ratio.
+    //! Will std::abort if an inconsistency is detected.
     void Check() const EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     //! Perform consistency check, regardless of m_consistency_check_ratio.
     //! @returns an error code or zero.
-    int ForceCheckAddrman() const EXCLUSIVE_LOCKS_REQUIRED(cs);
+    int CheckAddrman() const EXCLUSIVE_LOCKS_REQUIRED(cs);
 };
 
 #endif // BITCOIN_ADDRMAN_IMPL_H

@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2020 The Bitcoin Core developers
+// Copyright (c) 2012-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,13 +14,19 @@
 
 #include <optional>
 
+using wallet::CWallet;
+using wallet::CreateMockWalletDatabase;
+using wallet::DBErrors;
+using wallet::GetBalance;
+using wallet::WALLET_FLAG_DESCRIPTORS;
+
 static void WalletBalance(benchmark::Bench& bench, const bool set_dirty, const bool add_mine)
 {
     const auto test_setup = MakeNoLogFileContext<const TestingSetup>();
 
     const auto& ADDRESS_WATCHONLY = ADDRESS_BCRT1_UNSPENDABLE;
 
-    CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockWalletDatabase()};
+    CWallet wallet{test_setup->m_node.chain.get(), "", gArgs, CreateMockWalletDatabase()};
     {
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);

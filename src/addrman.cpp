@@ -1,5 +1,5 @@
 // Copyright (c) 2012 Pieter Wuille
-// Copyright (c) 2012-2020 The Bitcoin Core developers
+// Copyright (c) 2012-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,8 @@
 #include <addrman_impl.h>
 
 #include <hash.h>
+#include <logging.h>
+#include <logging/timer.h>
 #include <netaddress.h>
 #include <protocol.h>
 #include <random.h>
@@ -387,7 +389,7 @@ void AddrManImpl::Unserialize(Stream& s_)
         LogPrint(BCLog::ADDRMAN, "addrman lost %i new and %i tried addresses due to collisions or invalid addresses\n", nLostUnk, nLost);
     }
 
-    const int check_code{ForceCheckAddrman()};
+    const int check_code{CheckAddrman()};
     if (check_code != 0) {
         throw std::ios_base::failure(strprintf(
             "Corrupt data. Consistency check failed with code %s",
@@ -612,7 +614,7 @@ bool AddrManImpl::AddSingle(const CAddress& addr, const CNetAddr& source, int64_
     return fInsert;
 }
 
-void AddrManImpl::Good_(const CService& addr, bool test_before_evict, int64_t nTime)
+bool AddrManImpl::Good_(const CService& addr, bool test_before_evict, int64_t nTime)
 {
     AssertLockHeld(cs);
 
@@ -623,8 +625,7 @@ void AddrManImpl::Good_(const CService& addr, bool test_before_evict, int64_t nT
     AddrInfo* pinfo = Find(addr, &nId);
 
     // if not found, bail out
-    if (!pinfo)
-        return;
+    if (!pinfo) return false;
 
     AddrInfo& info = *pinfo;
 
@@ -636,13 +637,11 @@ void AddrManImpl::Good_(const CService& addr, bool test_before_evict, int64_t nT
     // currently-connected peers.
 
     // if it is already in the tried set, don't do anything else
-    if (info.fInTried)
-        return;
+    if (info.fInTried) return false;
 
     // if it is not in new, something bad happened
-    if (!Assume(info.nRefCount > 0)) {
-        return;
-    }
+    if (!Assume(info.nRefCount > 0)) return false;
+
 
     // which tried bucket to move the entry to
     int tried_bucket = info.GetTriedBucket(nKey, m_asmap);
@@ -659,11 +658,13 @@ void AddrManImpl::Good_(const CService& addr, bool test_before_evict, int64_t nT
                  colliding_entry != mapInfo.end() ? colliding_entry->second.ToString() : "",
                  addr.ToString(),
                  m_tried_collisions.size());
+        return false;
     } else {
         // move nId to the tried tables
         MakeTried(info, nId);
         LogPrint(BCLog::ADDRMAN, "Moved %s mapped to AS%i to tried[%i][%i]\n",
                  addr.ToString(), addr.GetMappedAS(m_asmap), tried_bucket, tried_bucket_pos);
+        return true;
     }
 }
 
@@ -929,6 +930,29 @@ std::pair<CAddress, int64_t> AddrManImpl::SelectTriedCollision_()
     return {info_old, info_old.nLastTry};
 }
 
+std::optional<AddressPosition> AddrManImpl::FindAddressEntry_(const CAddress& addr)
+{
+    AssertLockHeld(cs);
+
+    AddrInfo* addr_info = Find(addr);
+
+    if (!addr_info) return std::nullopt;
+
+    if(addr_info->fInTried) {
+        int bucket{addr_info->GetTriedBucket(nKey, m_asmap)};
+        return AddressPosition(/*tried=*/true,
+                               /*multiplicity=*/1,
+                               /*bucket=*/bucket,
+                               /*position=*/addr_info->GetBucketPosition(nKey, false, bucket));
+    } else {
+        int bucket{addr_info->GetNewBucket(nKey, m_asmap)};
+        return AddressPosition(/*tried=*/false,
+                               /*multiplicity=*/addr_info->nRefCount,
+                               /*bucket=*/bucket,
+                               /*position=*/addr_info->GetBucketPosition(nKey, true, bucket));
+    }
+}
+
 void AddrManImpl::Check() const
 {
     AssertLockHeld(cs);
@@ -937,18 +961,19 @@ void AddrManImpl::Check() const
     if (m_consistency_check_ratio == 0) return;
     if (insecure_rand.randrange(m_consistency_check_ratio) >= 1) return;
 
-    const int err{ForceCheckAddrman()};
+    const int err{CheckAddrman()};
     if (err) {
         LogPrintf("ADDRMAN CONSISTENCY CHECK FAILED!!! err=%i\n", err);
         assert(false);
     }
 }
 
-int AddrManImpl::ForceCheckAddrman() const
+int AddrManImpl::CheckAddrman() const
 {
     AssertLockHeld(cs);
 
-    LogPrint(BCLog::ADDRMAN, "Addrman checks started: new %i, tried %i, total %u\n", nNew, nTried, vRandom.size());
+    LOG_TIME_MILLIS_WITH_CATEGORY_MSG_ONCE(
+        strprintf("new %i, tried %i, total %u", nNew, nTried, vRandom.size()), BCLog::ADDRMAN);
 
     std::unordered_set<int> setTried;
     std::unordered_map<int, int> mapNew;
@@ -1028,7 +1053,6 @@ int AddrManImpl::ForceCheckAddrman() const
     if (nKey.IsNull())
         return -16;
 
-    LogPrint(BCLog::ADDRMAN, "Addrman checks completed successfully\n");
     return 0;
 }
 
@@ -1047,12 +1071,13 @@ bool AddrManImpl::Add(const std::vector<CAddress>& vAddr, const CNetAddr& source
     return ret;
 }
 
-void AddrManImpl::Good(const CService& addr, int64_t nTime)
+bool AddrManImpl::Good(const CService& addr, int64_t nTime)
 {
     LOCK(cs);
     Check();
-    Good_(addr, /* test_before_evict */ true, nTime);
+    auto ret = Good_(addr, /*test_before_evict=*/true, nTime);
     Check();
+    return ret;
 }
 
 void AddrManImpl::Attempt(const CService& addr, bool fCountFailure, int64_t nTime)
@@ -1114,6 +1139,15 @@ void AddrManImpl::SetServices(const CService& addr, ServiceFlags nServices)
     Check();
 }
 
+std::optional<AddressPosition> AddrManImpl::FindAddressEntry(const CAddress& addr)
+{
+    LOCK(cs);
+    Check();
+    auto entry = FindAddressEntry_(addr);
+    Check();
+    return entry;
+}
+
 const std::vector<bool>& AddrManImpl::GetAsmap() const
 {
     return m_asmap;
@@ -1155,9 +1189,9 @@ bool AddrMan::Add(const std::vector<CAddress>& vAddr, const CNetAddr& source, in
     return m_impl->Add(vAddr, source, nTimePenalty);
 }
 
-void AddrMan::Good(const CService& addr, int64_t nTime)
+bool AddrMan::Good(const CService& addr, int64_t nTime)
 {
-    m_impl->Good(addr, nTime);
+    return m_impl->Good(addr, nTime);
 }
 
 void AddrMan::Attempt(const CService& addr, bool fCountFailure, int64_t nTime)
@@ -1198,4 +1232,9 @@ void AddrMan::SetServices(const CService& addr, ServiceFlags nServices)
 const std::vector<bool>& AddrMan::GetAsmap() const
 {
     return m_impl->GetAsmap();
+}
+
+std::optional<AddressPosition> AddrMan::FindAddressEntry(const CAddress& addr)
+{
+    return m_impl->FindAddressEntry(addr);
 }
