@@ -1,25 +1,32 @@
-// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <test/fuzz/fuzz.h>
 
-#include <fs.h>
 #include <netaddress.h>
 #include <netbase.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
+#include <util/fs.h>
 #include <util/sock.h>
+#include <util/time.h>
 
+#include <csignal>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 #include <tuple>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 const std::function<void(const std::string&)> G_TEST_LOG_FUN{};
@@ -59,6 +66,7 @@ void FuzzFrameworkRegisterTarget(std::string_view name, TypeTestOneInput target,
     Assert(it_ins.second);
 }
 
+static std::string_view g_fuzz_target;
 static TypeTestOneInput* g_test_one_input{nullptr};
 
 void initialize()
@@ -74,13 +82,13 @@ void initialize()
         return WrappedGetAddrInfo(name, false);
     };
 
-    bool should_abort{false};
+    bool should_exit{false};
     if (std::getenv("PRINT_ALL_FUZZ_TARGETS_AND_ABORT")) {
         for (const auto& t : FuzzTargets()) {
             if (std::get<2>(t.second)) continue;
             std::cout << t.first << std::endl;
         }
-        should_abort = true;
+        should_exit = true;
     }
     if (const char* out_path = std::getenv("WRITE_ALL_FUZZ_TARGETS_AND_ABORT")) {
         std::cout << "Writing all fuzz target names to '" << out_path << "'." << std::endl;
@@ -89,12 +97,25 @@ void initialize()
             if (std::get<2>(t.second)) continue;
             out_stream << t.first << std::endl;
         }
-        should_abort = true;
+        should_exit= true;
     }
-    Assert(!should_abort);
-    std::string_view fuzz_target{Assert(std::getenv("FUZZ"))};
-    const auto it = FuzzTargets().find(fuzz_target);
-    Assert(it != FuzzTargets().end());
+    if (should_exit){
+        std::exit(EXIT_SUCCESS);
+    }
+    if (const auto* env_fuzz{std::getenv("FUZZ")}) {
+        // To allow for easier fuzz executable binary modification,
+        static std::string g_copy{env_fuzz}; // create copy to avoid compiler optimizations, and
+        g_fuzz_target = g_copy.c_str();      // strip string after the first null-char.
+    } else {
+        std::cerr << "Must select fuzz target with the FUZZ env var." << std::endl;
+        std::cerr << "Hint: Set the PRINT_ALL_FUZZ_TARGETS_AND_ABORT=1 env var to see all compiled targets." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    const auto it = FuzzTargets().find(g_fuzz_target);
+    if (it == FuzzTargets().end()) {
+        std::cerr << "No fuzz target compiled for " << g_fuzz_target << "." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     Assert(!g_test_one_input);
     g_test_one_input = &std::get<0>(it->second);
     std::get<1>(it->second)();
@@ -109,6 +130,35 @@ static bool read_stdin(std::vector<uint8_t>& data)
         data.insert(data.end(), buffer, buffer + length);
     }
     return length == 0;
+}
+#endif
+
+#if defined(PROVIDE_FUZZ_MAIN_FUNCTION) && !defined(__AFL_LOOP)
+static bool read_file(fs::path p, std::vector<uint8_t>& data)
+{
+    uint8_t buffer[1024];
+    FILE* f = fsbridge::fopen(p, "rb");
+    if (f == nullptr) return false;
+    do {
+        const size_t length = fread(buffer, sizeof(uint8_t), sizeof(buffer), f);
+        if (ferror(f)) return false;
+        data.insert(data.end(), buffer, buffer + length);
+    } while (!feof(f));
+    fclose(f);
+    return true;
+}
+#endif
+
+#if defined(PROVIDE_FUZZ_MAIN_FUNCTION) && !defined(__AFL_LOOP)
+static fs::path g_input_path;
+void signal_handler(int signal)
+{
+    if (signal == SIGABRT) {
+        std::cerr << "Error processing input " << g_input_path << std::endl;
+    } else {
+        std::cerr << "Unexpected signal " << signal << " received\n";
+    }
+    std::_Exit(EXIT_FAILURE);
 }
 #endif
 
@@ -151,10 +201,37 @@ int main(int argc, char** argv)
     }
 #else
     std::vector<uint8_t> buffer;
-    if (!read_stdin(buffer)) {
+    if (argc <= 1) {
+        if (!read_stdin(buffer)) {
+            return 0;
+        }
+        test_one_input(buffer);
         return 0;
     }
-    test_one_input(buffer);
+    std::signal(SIGABRT, signal_handler);
+    const auto start_time{Now<SteadySeconds>()};
+    int tested = 0;
+    for (int i = 1; i < argc; ++i) {
+        fs::path input_path(*(argv + i));
+        if (fs::is_directory(input_path)) {
+            for (fs::directory_iterator it(input_path); it != fs::directory_iterator(); ++it) {
+                if (!fs::is_regular_file(it->path())) continue;
+                g_input_path = it->path();
+                Assert(read_file(it->path(), buffer));
+                test_one_input(buffer);
+                ++tested;
+                buffer.clear();
+            }
+        } else {
+            g_input_path = input_path;
+            Assert(read_file(input_path, buffer));
+            test_one_input(buffer);
+            ++tested;
+            buffer.clear();
+        }
+    }
+    const auto end_time{Now<SteadySeconds>()};
+    std::cout << g_fuzz_target << ": succeeded against " << tested << " files in " << count_seconds(end_time - start_time) << "s." << std::endl;
 #endif
     return 0;
 }

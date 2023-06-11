@@ -8,6 +8,9 @@ from test_framework.util import assert_equal
 
 
 class WalletLocktimeTest(BitcoinTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+
     def set_test_params(self):
         self.num_nodes = 1
 
@@ -26,11 +29,11 @@ class WalletLocktimeTest(BitcoinTestFramework):
         self.log.info("Send to new address with locktime")
         node.send(
             outputs={address: 5},
-            options={"locktime": mtp_tip - 1},
+            locktime=mtp_tip - 1,
         )
         self.generate(node, 1)
 
-        self.log.info("Check that clock can not change finality of confirmed txs")
+        self.log.info("Check that clock cannot change finality of confirmed txs")
         amount_before_ad = node.getreceivedbyaddress(address)
         amount_before_lb = node.getreceivedbylabel(label)
         list_before_ad = node.listreceivedbyaddress(address_filter=address)

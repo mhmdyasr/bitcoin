@@ -1,16 +1,16 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <wallet/load.h>
 
-#include <fs.h>
+#include <common/args.h>
 #include <interfaces/chain.h>
 #include <scheduler.h>
 #include <util/check.h>
+#include <util/fs.h>
 #include <util/string.h>
-#include <util/system.h>
 #include <util/translation.h>
 #include <wallet/context.h>
 #include <wallet/spend.h>
@@ -28,7 +28,7 @@ bool VerifyWallets(WalletContext& context)
     ArgsManager& args = *Assert(context.args);
 
     if (args.IsArgSet("-walletdir")) {
-        fs::path wallet_dir = fs::PathFromString(args.GetArg("-walletdir", ""));
+        const fs::path wallet_dir{args.GetPathArg("-walletdir")};
         std::error_code error;
         // The canonical path cleans the path, preventing >1 Berkeley environment instances for the same directory
         // It also lets the fs::exists and fs::is_directory checks below pass on windows, since they return false
@@ -57,11 +57,12 @@ bool VerifyWallets(WalletContext& context)
     if (!args.IsArgSet("wallet")) {
         DatabaseOptions options;
         DatabaseStatus status;
+        ReadDatabaseArgs(args, options);
         bilingual_str error_string;
         options.require_existing = true;
         options.verify = false;
         if (MakeWalletDatabase("", options, status, error_string)) {
-            util::SettingsValue wallets(util::SettingsValue::VARR);
+            common::SettingsValue wallets(common::SettingsValue::VARR);
             wallets.push_back(""); // Default wallet name is ""
             // Pass write=false because no need to write file and probably
             // better not to. If unnamed wallet needs to be added next startup
@@ -84,6 +85,7 @@ bool VerifyWallets(WalletContext& context)
 
         DatabaseOptions options;
         DatabaseStatus status;
+        ReadDatabaseArgs(args, options);
         options.require_existing = true;
         options.verify = true;
         bilingual_str error_string;
@@ -112,6 +114,7 @@ bool LoadWallets(WalletContext& context)
             }
             DatabaseOptions options;
             DatabaseStatus status;
+            ReadDatabaseArgs(*context.args, options);
             options.require_existing = true;
             options.verify = false; // No need to verify, assuming verified earlier in VerifyWallets()
             bilingual_str error;
@@ -127,6 +130,8 @@ bool LoadWallets(WalletContext& context)
                 chain.initError(error);
                 return false;
             }
+
+            NotifyWalletLoaded(context, pwallet);
             AddWallet(context, pwallet);
         }
         return true;
@@ -146,7 +151,7 @@ void StartWallets(WalletContext& context, CScheduler& scheduler)
     if (context.args->GetBoolArg("-flushwallet", DEFAULT_FLUSHWALLET)) {
         scheduler.scheduleEvery([&context] { MaybeCompactWalletDB(context); }, std::chrono::milliseconds{500});
     }
-    scheduler.scheduleEvery([&context] { MaybeResendWalletTxs(context); }, std::chrono::milliseconds{1000});
+    scheduler.scheduleEvery([&context] { MaybeResendWalletTxs(context); }, 1min);
 }
 
 void FlushWallets(WalletContext& context)

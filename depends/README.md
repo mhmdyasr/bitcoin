@@ -15,6 +15,7 @@ For example:
 **Bitcoin Core's `configure` script by default will ignore the depends output.** In
 order for it to pick up libraries, tools, and settings from the depends build,
 you must set the `CONFIG_SITE` environment variable to point to a `config.site` settings file.
+Make sure that `CONFIG_SITE` is an absolute path.
 In the above example, a file named `depends/x86_64-w64-mingw32/share/config.site` will be
 created. To use it during compilation:
 
@@ -62,7 +63,7 @@ For more information, see [SDK Extraction](../contrib/macdeploy/README.md#sdk-ex
 
 Common linux dependencies:
 
-    sudo apt-get install make automake cmake curl g++-multilib libtool binutils-gold bsdmainutils pkg-config python3 patch bison
+    sudo apt-get install make automake cmake curl g++-multilib libtool binutils bsdmainutils pkg-config python3 patch bison
 
 For linux ARM cross compilation:
 
@@ -84,6 +85,10 @@ For linux S390X cross compilation:
 
     sudo apt-get install g++-s390x-linux-gnu binutils-s390x-linux-gnu
 
+### Install the required dependencies: OpenBSD
+
+    pkg_add bash gtar
+
 ### Dependency Options
 
 The following can be set when running make: `make FOO=bar`
@@ -92,6 +97,10 @@ The following can be set when running make: `make FOO=bar`
 - `BASE_CACHE`: Built packages will be placed here
 - `SDK_PATH`: Path where SDKs can be found (used by macOS)
 - `FALLBACK_DOWNLOAD_PATH`: If a source file can't be fetched, try here before giving up
+- `C_STANDARD`: Set the C standard version used. Defaults to `c11`.
+- `CXX_STANDARD`: Set the C++ standard version used. Defaults to `c++17`.
+- `NO_BOOST`: Don't download/build/cache Boost
+- `NO_LIBEVENT`: Don't download/build/cache Libevent
 - `NO_QT`: Don't download/build/cache Qt and its dependencies
 - `NO_QR`: Don't download/build/cache packages needed for enabling qrencode
 - `NO_ZMQ`: Don't download/build/cache packages needed for enabling ZeroMQ
@@ -99,7 +108,8 @@ The following can be set when running make: `make FOO=bar`
 - `NO_BDB`: Don't download/build/cache BerkeleyDB
 - `NO_SQLITE`: Don't download/build/cache SQLite
 - `NO_UPNP`: Don't download/build/cache packages needed for enabling UPnP
-- `NO_NATPMP`: Don't download/build/cache packages needed for enabling NAT-PMP</dd>
+- `NO_NATPMP`: Don't download/build/cache packages needed for enabling NAT-PMP
+- `NO_USDT`: Don't download/build/cache packages needed for enabling USDT tracepoints
 - `ALLOW_HOST_PACKAGES`: Packages that are missed in dependencies (due to `NO_*` option or
   build script logic) are searched for among the host system packages using
   `pkg-config`. It allows building with packages of other (newer) versions
@@ -109,7 +119,12 @@ The following can be set when running make: `make FOO=bar`
 - `BUILD_ID_SALT`: Optional salt to use when generating build package ids
 - `FORCE_USE_SYSTEM_CLANG`: (EXPERTS ONLY) When cross-compiling for macOS, use Clang found in the
   system's `$PATH` rather than the default prebuilt release of Clang
-  from llvm.org. Clang 8 or later is required.
+  from llvm.org. Clang 8 or later is required
+- `LOG`: Use file-based logging for individual packages. During a package build its log file
+  resides in the `depends` directory, and the log file is printed out automatically in case
+  of build error. After successful build log files are moved along with package archives
+- `LTO`: Use LTO when building packages.
+- `NO_HARDEN=1`: Don't use hardening options when building packages
 
 If some packages are not built, for example `make NO_WALLET=1`, the appropriate
 options will be passed to bitcoin's configure. In this case, `--disable-wallet`.

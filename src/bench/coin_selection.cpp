@@ -1,25 +1,27 @@
-// Copyright (c) 2012-2021 The Bitcoin Core developers
+// Copyright (c) 2012-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
 #include <interfaces/chain.h>
 #include <node/context.h>
+#include <policy/policy.h>
 #include <wallet/coinselection.h>
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
+#include <wallet/test/util.h>
 
 #include <set>
 
 using node::NodeContext;
 using wallet::AttemptSelection;
-using wallet::CInputCoin;
+using wallet::CHANGE_LOWER;
 using wallet::COutput;
 using wallet::CWallet;
 using wallet::CWalletTx;
 using wallet::CoinEligibilityFilter;
 using wallet::CoinSelectionParams;
-using wallet::CreateDummyWalletDatabase;
+using wallet::CreateMockableWalletDatabase;
 using wallet::OutputGroup;
 using wallet::SelectCoinsBnB;
 using wallet::TxStateInactive;
@@ -45,7 +47,7 @@ static void CoinSelection(benchmark::Bench& bench)
 {
     NodeContext node;
     auto chain = interfaces::MakeChain(node);
-    CWallet wallet(chain.get(), "", gArgs, CreateDummyWalletDatabase());
+    CWallet wallet(chain.get(), "", CreateMockableWalletDatabase());
     std::vector<std::unique_ptr<CWalletTx>> wtxs;
     LOCK(wallet.cs_wallet);
 
@@ -56,25 +58,33 @@ static void CoinSelection(benchmark::Bench& bench)
     addCoin(3 * COIN, wallet, wtxs);
 
     // Create coins
-    std::vector<COutput> coins;
+    wallet::CoinsResult available_coins;
     for (const auto& wtx : wtxs) {
-        coins.emplace_back(wallet, *wtx, 0 /* iIn */, 6 * 24 /* nDepthIn */, true /* spendable */, true /* solvable */, true /* safe */);
+        const auto txout = wtx->tx->vout.at(0);
+        available_coins.coins[OutputType::BECH32].emplace_back(COutPoint(wtx->GetHash(), 0), txout, /*depth=*/6 * 24, CalculateMaximumSignedInputSize(txout, &wallet, /*coin_control=*/nullptr), /*spendable=*/true, /*solvable=*/true, /*safe=*/true, wtx->GetTxTime(), /*from_me=*/true, /*fees=*/ 0);
     }
 
     const CoinEligibilityFilter filter_standard(1, 6, 0);
-    const CoinSelectionParams coin_selection_params(/* change_output_size= */ 34,
-                                                    /* change_spend_size= */ 148, /* effective_feerate= */ CFeeRate(0),
-                                                    /* long_term_feerate= */ CFeeRate(0), /* discard_feerate= */ CFeeRate(0),
-                                                    /* tx_noinputs_size= */ 0, /* avoid_partial= */ false);
+    FastRandomContext rand{};
+    const CoinSelectionParams coin_selection_params{
+        rand,
+        /*change_output_size=*/ 34,
+        /*change_spend_size=*/ 148,
+        /*min_change_target=*/ CHANGE_LOWER,
+        /*effective_feerate=*/ CFeeRate(0),
+        /*long_term_feerate=*/ CFeeRate(0),
+        /*discard_feerate=*/ CFeeRate(0),
+        /*tx_noinputs_size=*/ 0,
+        /*avoid_partial=*/ false,
+    };
+    auto group = wallet::GroupOutputs(wallet, available_coins, coin_selection_params, {{filter_standard}})[filter_standard];
     bench.run([&] {
-        auto result = AttemptSelection(wallet, 1003 * COIN, filter_standard, coins, coin_selection_params);
+        auto result = AttemptSelection(1003 * COIN, group, coin_selection_params, /*allow_mixed_output_types=*/true);
         assert(result);
         assert(result->GetSelectedValue() == 1003 * COIN);
         assert(result->GetInputSet().size() == 2);
     });
 }
-
-typedef std::set<CInputCoin> CoinSet;
 
 // Copied from src/wallet/test/coinselector_tests.cpp
 static void add_coin(const CAmount& nValue, int nInput, std::vector<OutputGroup>& set)
@@ -82,9 +92,9 @@ static void add_coin(const CAmount& nValue, int nInput, std::vector<OutputGroup>
     CMutableTransaction tx;
     tx.vout.resize(nInput + 1);
     tx.vout[nInput].nValue = nValue;
-    CInputCoin coin(MakeTransactionRef(tx), nInput);
+    COutput output(COutPoint(tx.GetHash(), nInput), tx.vout.at(nInput), /*depth=*/ 0, /*input_bytes=*/ -1, /*spendable=*/ true, /*solvable=*/ true, /*safe=*/ true, /*time=*/ 0, /*from_me=*/ true, /*fees=*/ 0);
     set.emplace_back();
-    set.back().Insert(coin, 0, true, 0, 0, false);
+    set.back().Insert(std::make_shared<COutput>(output), /*ancestors=*/ 0, /*descendants=*/ 0);
 }
 // Copied from src/wallet/test/coinselector_tests.cpp
 static CAmount make_hard_case(int utxos, std::vector<OutputGroup>& utxo_pool)
@@ -92,9 +102,9 @@ static CAmount make_hard_case(int utxos, std::vector<OutputGroup>& utxo_pool)
     utxo_pool.clear();
     CAmount target = 0;
     for (int i = 0; i < utxos; ++i) {
-        target += (CAmount)1 << (utxos+i);
-        add_coin((CAmount)1 << (utxos+i), 2*i, utxo_pool);
-        add_coin(((CAmount)1 << (utxos+i)) + ((CAmount)1 << (utxos-1-i)), 2*i + 1, utxo_pool);
+        target += CAmount{1} << (utxos+i);
+        add_coin(CAmount{1} << (utxos+i), 2*i, utxo_pool);
+        add_coin((CAmount{1} << (utxos+i)) + (CAmount{1} << (utxos-1-i)), 2*i + 1, utxo_pool);
     }
     return target;
 }
@@ -107,12 +117,12 @@ static void BnBExhaustion(benchmark::Bench& bench)
     bench.run([&] {
         // Benchmark
         CAmount target = make_hard_case(17, utxo_pool);
-        SelectCoinsBnB(utxo_pool, target, 0); // Should exhaust
+        SelectCoinsBnB(utxo_pool, target, 0, MAX_STANDARD_TX_WEIGHT); // Should exhaust
 
         // Cleanup
         utxo_pool.clear();
     });
 }
 
-BENCHMARK(CoinSelection);
-BENCHMARK(BnBExhaustion);
+BENCHMARK(CoinSelection, benchmark::PriorityLevel::HIGH);
+BENCHMARK(BnBExhaustion, benchmark::PriorityLevel::HIGH);

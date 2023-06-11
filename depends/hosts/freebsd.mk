@@ -1,11 +1,17 @@
-freebsd_CFLAGS=-pipe
-freebsd_CFLAGS_CXXFLAGS=$(freebsd_CFLAGS)
+freebsd_CFLAGS=-pipe -std=$(C_STANDARD)
+freebsd_CXXFLAGS=-pipe -std=$(CXX_STANDARD)
 
-freebsd_CFLAGS_release_CFLAGS=-O2
-freebsd_CFLAGS_release_CXXFLAGS=$(freebsd_release_CFLAGS)
+ifneq ($(LTO),)
+freebsd_CFLAGS += -flto
+freebsd_CXXFLAGS += -flto
+freebsd_LDFLAGS += -flto
+endif
 
-freebsd_CFLAGS_debug_CFLAGS=-O1
-freebsd_CFLAGS_debug_CXXFLAGS=$(freebsd_debug_CFLAGS)
+freebsd_release_CFLAGS=-O2
+freebsd_release_CXXFLAGS=$(freebsd_release_CFLAGS)
+
+freebsd_debug_CFLAGS=-O1
+freebsd_debug_CXXFLAGS=$(freebsd_debug_CFLAGS)
 
 ifeq (86,$(findstring 86,$(build_arch)))
 i686_freebsd_CC=clang -m32
