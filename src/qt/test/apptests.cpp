@@ -6,11 +6,11 @@
 
 #include <chainparams.h>
 #include <key.h>
+#include <logging.h>
 #include <qt/bitcoin.h>
 #include <qt/bitcoingui.h>
 #include <qt/networkstyle.h>
 #include <qt/rpcconsole.h>
-#include <shutdown.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 
@@ -86,7 +86,6 @@ void AppTests::appTests()
 
     // Reset global state to avoid interfering with later tests.
     LogInstance().DisconnectTestLogger();
-    AbortShutdown();
 }
 
 //! Entry point for BitcoinGUI tests.
