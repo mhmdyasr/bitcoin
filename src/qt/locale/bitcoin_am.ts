@@ -15,19 +15,19 @@
     </message>
     <message>
         <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">አሁን የተመረጠውን አድራሻ ወደ ስርዓቱ ቅንጥብ ሰሌዳ ቅዳ</translation>
+        <translation type="unfinished">አሁን የተመረጠውን አድራሻ ወደ ስርዓቱ ቅንጥብ ሰሌዳ ይቅዱ</translation>
     </message>
     <message>
         <source>&amp;Copy</source>
-        <translation type="unfinished">&amp;ቅዳ</translation>
+        <translation type="unfinished">&amp;ይቅዱ</translation>
     </message>
     <message>
         <source>C&amp;lose</source>
-        <translation type="unfinished">ዝጋ</translation>
+        <translation type="unfinished">ይዝጉ</translation>
     </message>
     <message>
         <source>Delete the currently selected address from the list</source>
-        <translation type="unfinished">አሁን የተመረጠውን አድራሻ ከዝርዝሩ ውስጥ አጥፋ</translation>
+        <translation type="unfinished">አሁን የተመረጠውን አድራሻ ከዝርዝሩ ውስጥ ያጥፉ</translation>
     </message>
     <message>
         <source>Enter address or label to search</source>
@@ -35,15 +35,15 @@
     </message>
     <message>
         <source>Export the data in the current tab to a file</source>
-        <translation type="unfinished">በዚህ ማውጫ ውስጥ ያለውን ውሂብ ወደ አንድ ፋይል ቀይረህ አስቀምጥ</translation>
+        <translation type="unfinished">በዚህ ማውጫ ውስጥ ያለውን ውሂብ ወደ ፋይል አዛውረው ያስቀምጡ</translation>
     </message>
     <message>
         <source>&amp;Export</source>
-        <translation type="unfinished">&amp;ላክ</translation>
+        <translation type="unfinished">&amp;ይላኩ</translation>
     </message>
     <message>
         <source>&amp;Delete</source>
-        <translation type="unfinished">&amp;ሰርዝ</translation>
+        <translation type="unfinished">&amp;ይሰርዙ</translation>
     </message>
     <message>
         <source>Choose the address to send coins to</source>
@@ -299,7 +299,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
             <numerusform>%n year(s)</numerusform>
         </translation>
     </message>
-    </context>
+    <message>
+        <source>default wallet</source>
+        <translation type="unfinished">መደበኛ ዋሌት</translation>
+    </message>
+</context>
 <context>
     <name>BitcoinGUI</name>
     <message>
@@ -402,10 +406,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">ዋሌት ዝጋ</translation>
     </message>
     <message>
-        <source>default wallet</source>
-        <translation type="unfinished">መደበኛ ዋሌት</translation>
-    </message>
-    <message>
         <source>Wallet Name</source>
         <extracomment>Label of the input field where the name of the wallet is entered.</extracomment>
         <translation type="unfinished">ዋሌት ስም</translation>
@@ -486,10 +486,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </context>
 <context>
     <name>OpenWalletActivity</name>
-    <message>
-        <source>default wallet</source>
-        <translation type="unfinished">መደበኛ ዋሌት</translation>
-    </message>
     <message>
         <source>Open Wallet</source>
         <extracomment>Title of window indicating the progress of opening of a wallet.</extracomment>
@@ -746,21 +742,14 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     </context>
 <context>
-    <name>WalletModel</name>
-    <message>
-        <source>default wallet</source>
-        <translation type="unfinished">መደበኛ ዋሌት</translation>
-    </message>
-</context>
-<context>
     <name>WalletView</name>
     <message>
         <source>&amp;Export</source>
-        <translation type="unfinished">&amp;ላክ</translation>
+        <translation type="unfinished">&amp;ይላኩ</translation>
     </message>
     <message>
         <source>Export the data in the current tab to a file</source>
-        <translation type="unfinished">በዚህ ማውጫ ውስጥ ያለውን ውሂብ ወደ አንድ ፋይል ቀይረህ አስቀምጥ</translation>
+        <translation type="unfinished">በዚህ ማውጫ ውስጥ ያለውን ውሂብ ወደ ፋይል አዛውረው ያስቀምጡ</translation>
     </message>
     </context>
 </TS>

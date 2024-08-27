@@ -59,7 +59,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <extracomment>Expanded name of the CSV file format. See: https://en.wikipedia.org/wiki/Comma-separated_values.</extracomment>
         <translation type="unfinished">কমা দিয়ে আলাদা করা ফাইল</translation>
     </message>
-    </context>
+    <message>
+        <source>Exporting Failed</source>
+        <translation type="unfinished">রপ্তানি ব্যর্থ হয়েছে৷</translation>
+    </message>
+</context>
 <context>
     <name>AddressTableModel</name>
     <message>
@@ -70,7 +74,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <source>Address</source>
         <translation type="unfinished">ঠিকানা</translation>
     </message>
-    </context>
+    <message>
+        <source>(no label)</source>
+        <translation type="unfinished">(কোন লেবেল নেই)</translation>
+    </message>
+</context>
 <context>
     <name>AskPassphraseDialog</name>
     <message>
@@ -458,6 +466,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">ঠিকানা কপি করুন</translation>
     </message>
     <message>
+        <source>via %1</source>
+        <translation type="unfinished">এর মাধ্যমে %1</translation>
+    </message>
+    <message>
         <source>Unknown</source>
         <translation type="unfinished">অজানা</translation>
     </message>
@@ -604,6 +616,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>ID</source>
         <translation type="unfinished">আইডি</translation>
+    </message>
+    <message>
+        <source>Exporting Failed</source>
+        <translation type="unfinished">রপ্তানি ব্যর্থ হয়েছে৷</translation>
     </message>
     <message>
         <source>Exporting Successful</source>
