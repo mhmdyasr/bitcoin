@@ -1,4 +1,4 @@
-// Copyright (c) 2023 The Bitcoin Core developers
+// Copyright (c) 2023-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,12 +11,12 @@
 #include <util/chaintype.h>
 #include <util/fs.h>
 
+#include <cstdint>
 #include <iosfwd>
 #include <list>
 #include <map>
 #include <optional>
 #include <set>
-#include <stdint.h>
 #include <string>
 #include <variant>
 #include <vector>
@@ -63,6 +63,8 @@ enum class OptionsCategory {
     GUI,
     COMMANDS,
     REGISTER_COMMANDS,
+    CLI_COMMANDS,
+    IPC,
 
     HIDDEN // Always the last option to avoid printing these in the help
 };
@@ -357,11 +359,14 @@ protected:
     /**
      * Clear available arguments
      */
-    void ClearArgs() {
-        LOCK(cs_args);
-        m_available_args.clear();
-        m_network_only_args.clear();
-    }
+    void ClearArgs();
+
+    /**
+     * Check CLI command args
+     *
+     * @throws std::runtime_error when multiple CLI_COMMAND arguments are specified
+     */
+    void CheckMultipleCLIArgs() const;
 
     /**
      * Get the help string

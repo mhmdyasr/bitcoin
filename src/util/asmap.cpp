@@ -203,10 +203,10 @@ std::vector<bool> DecodeAsmap(fs::path path)
         LogPrintf("Failed to open asmap file from disk\n");
         return bits;
     }
-    fseek(filestr, 0, SEEK_END);
-    int length = ftell(filestr);
-    LogPrintf("Opened asmap file %s (%d bytes) from disk\n", fs::quoted(fs::PathToString(path)), length);
-    fseek(filestr, 0, SEEK_SET);
+    file.seek(0, SEEK_END);
+    int length = file.tell();
+    LogInfo("Opened asmap file %s (%d bytes) from disk", fs::quoted(fs::PathToString(path)), length);
+    file.seek(0, SEEK_SET);
     uint8_t cur_byte;
     for (int i = 0; i < length; ++i) {
         file >> cur_byte;

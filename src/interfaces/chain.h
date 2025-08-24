@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 The Bitcoin Core developers
+// Copyright (c) 2018-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,14 +7,15 @@
 
 #include <blockfilter.h>
 #include <common/settings.h>
-#include <primitives/transaction.h> // For CTransactionRef
+#include <primitives/transaction.h>
 #include <util/result.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
-#include <stddef.h>
-#include <stdint.h>
 #include <string>
 #include <vector>
 
@@ -40,12 +41,6 @@ namespace interfaces {
 
 class Handler;
 class Wallet;
-
-//! Hash/height pair to help track and identify blocks.
-struct BlockKey {
-    uint256 hash;
-    int height = -1;
-};
 
 //! Helper for findBlock to selectively return pieces of block data. If block is
 //! found, data will be returned by setting specified output variables. If block
@@ -96,6 +91,17 @@ struct BlockInfo {
     BlockInfo(const uint256& hash LIFETIMEBOUND) : hash(hash) {}
 };
 
+//! The action to be taken after updating a settings value.
+//! WRITE indicates that the updated value must be written to disk,
+//! while SKIP_WRITE indicates that the change will be kept in memory-only
+//! without persisting it.
+enum class SettingsAction {
+    WRITE,
+    SKIP_WRITE
+};
+
+using SettingsUpdate = std::function<std::optional<interfaces::SettingsAction>(common::SettingsValue&)>;
+
 //! Interface giving clients (wallet processes, maybe other analysis tools in
 //! the future) ability to access to the chain state, receive notifications,
 //! estimate fees, and submit transactions.
@@ -136,13 +142,6 @@ public:
     //! Check that the block is available on disk (i.e. has not been
     //! pruned), and contains transactions.
     virtual bool haveBlockOnDisk(int height) = 0;
-
-    //! Get locator for the current chain tip.
-    virtual CBlockLocator getTipLocator() = 0;
-
-    //! Return a locator that refers to a block in the active chain.
-    //! If specified block is not in the active chain, return locator for the latest ancestor that is in the chain.
-    virtual CBlockLocator getActiveChainLocator(const uint256& block_hash) = 0;
 
     //! Return height of the highest block on chain in common with the locator,
     //! which will either be the original block used to create the locator,
@@ -202,10 +201,10 @@ public:
     virtual RBFTransactionState isRBFOptIn(const CTransaction& tx) = 0;
 
     //! Check if transaction is in mempool.
-    virtual bool isInMempool(const uint256& txid) = 0;
+    virtual bool isInMempool(const Txid& txid) = 0;
 
     //! Check if transaction has descendants in mempool.
-    virtual bool hasDescendantsInMempool(const uint256& txid) = 0;
+    virtual bool hasDescendantsInMempool(const Txid& txid) = 0;
 
     //! Transaction is added to memory pool, if the transaction fee is below the
     //! amount specified by max_tx_fee, and broadcast to all peers if relay is set to true.
@@ -216,7 +215,7 @@ public:
         std::string& err_string) = 0;
 
     //! Calculate mempool ancestor and descendant counts for the given transaction.
-    virtual void getTransactionAncestry(const uint256& txid, size_t& ancestors, size_t& descendants, size_t* ancestorsize = nullptr, CAmount* ancestorfees = nullptr) = 0;
+    virtual void getTransactionAncestry(const Txid& txid, size_t& ancestors, size_t& descendants, size_t* ancestorsize = nullptr, CAmount* ancestorfees = nullptr) = 0;
 
     //! For each outpoint, calculate the fee-bumping cost to spend this outpoint at the specified
     //  feerate, including bumping its ancestors. For example, if the target feerate is 10sat/vbyte
@@ -284,6 +283,9 @@ public:
     //! Check if any block has been pruned.
     virtual bool havePruned() = 0;
 
+    //! Get the current prune height.
+    virtual std::optional<int> getPruneHeight() = 0;
+
     //! Check if the node is ready to broadcast transactions.
     virtual bool isReadyToBroadcast() = 0;
 
@@ -318,6 +320,17 @@ public:
         virtual void chainStateFlushed(ChainstateRole role, const CBlockLocator& locator) {}
     };
 
+    //! Options specifying which chain notifications are required.
+    struct NotifyOptions
+    {
+        //! Include undo data with block connected notifications.
+        bool connect_undo_data = false;
+        //! Include block data with block disconnected notifications.
+        bool disconnect_data = false;
+        //! Include undo data with block disconnected notifications.
+        bool disconnect_undo_data = false;
+    };
+
     //! Register handler for notifications.
     virtual std::unique_ptr<Handler> handleNotifications(std::shared_ptr<Notifications> notifications) = 0;
 
@@ -332,9 +345,6 @@ public:
     //! Check if deprecated RPC is enabled.
     virtual bool rpcEnableDeprecated(const std::string& method) = 0;
 
-    //! Run function after given number of seconds. Cancel any previous calls with same name.
-    virtual void rpcRunLater(const std::string& name, std::function<void()> fn, int64_t seconds) = 0;
-
     //! Get settings value.
     virtual common::SettingsValue getSetting(const std::string& arg) = 0;
 
@@ -344,9 +354,23 @@ public:
     //! Return <datadir>/settings.json setting value.
     virtual common::SettingsValue getRwSetting(const std::string& name) = 0;
 
-    //! Write a setting to <datadir>/settings.json. Optionally just update the
-    //! setting in memory and do not write the file.
-    virtual bool updateRwSetting(const std::string& name, const common::SettingsValue& value, bool write=true) = 0;
+    //! Updates a setting in <datadir>/settings.json.
+    //! Null can be passed to erase the setting. There is intentionally no
+    //! support for writing null values to settings.json.
+    //! Depending on the action returned by the update function, this will either
+    //! update the setting in memory or write the updated settings to disk.
+    virtual bool updateRwSetting(const std::string& name, const SettingsUpdate& update_function) = 0;
+
+    //! Replace a setting in <datadir>/settings.json with a new value.
+    //! Null can be passed to erase the setting.
+    //! This method provides a simpler alternative to updateRwSetting when
+    //! atomically reading and updating the setting is not required.
+    virtual bool overwriteRwSetting(const std::string& name, common::SettingsValue value, SettingsAction action = SettingsAction::WRITE) = 0;
+
+    //! Delete a given setting in <datadir>/settings.json.
+    //! This method provides a simpler alternative to overwriteRwSetting when
+    //! erasing a setting, for ease of use and readability.
+    virtual bool deleteRwSettings(const std::string& name, SettingsAction action = SettingsAction::WRITE) = 0;
 
     //! Synchronously send transactionAddedToMempool notifications about all
     //! current mempool transactions to the specified handler and return after
@@ -384,9 +408,6 @@ public:
 
     //! Start client execution and provide a scheduler.
     virtual void start(CScheduler& scheduler) = 0;
-
-    //! Save state to disk.
-    virtual void flush() = 0;
 
     //! Shut down client.
     virtual void stop() = 0;
